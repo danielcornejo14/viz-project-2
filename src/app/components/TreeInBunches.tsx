@@ -38,11 +38,14 @@ const TreeInBunches: React.FC<TreeInBunchesInterface> = ({ width, height, data }
             return [Math.min(...angles), Math.max(...angles)];
         };
 
+
+        const oddLeavesGravity = 0.15
+        const leavesGravity = -0.02
         const drawLinks = (node: d3.HierarchyPointNode<TreeNode>) => {
             if (!node.children || node.children.length === 0) return;
 
             const [minAng, maxAng] = minAndMaxAngle(node);
-            const radius = node.y+55;
+            const radius = node.y+80;
             const start = radialPoint(node.x, node.y);
             const midAngle = (minAng + maxAng)/2;
             const midPoint = radialPoint(midAngle, radius);
@@ -67,21 +70,32 @@ const TreeInBunches: React.FC<TreeInBunchesInterface> = ({ width, height, data }
                 .attr("y2", midPoint[1])
                 .attr("stroke", "#555");
 
-                node.children.forEach(child => {
-                    const childRadius = radius + 0; // Adjust as needed
+
+                node.children.forEach((child, index) => {
+                    const childRadius = radius;
+                    
+                    if(index%2 !== 0 && !child.children){
+                        child.y = child.y - (child.y * oddLeavesGravity)
+                    }
+
+                    // Adjust as needed
                     const childPossiton = radialPoint(child.x, child.y);
                     const childPoint = radialPoint(child.x, childRadius);
             
                     // Compute the angles for the arc from midPoint to child
                     const childAngle = (child.x + midAngle) / 2;
                     const childArcRadius = (radius + childRadius) / 2;
-            
+                    
+                    
+
                     const childArcPath = d3.arc()
                         .innerRadius(childArcRadius)
                         .outerRadius(childArcRadius)
                         .startAngle(midAngle)
                         .endAngle(child.x);
-            
+
+
+
                     // Draw arc from midpoint of the original arc to each child
                     svg.append("path")
                         .attr("d", childArcPath as any)
@@ -93,16 +107,24 @@ const TreeInBunches: React.FC<TreeInBunchesInterface> = ({ width, height, data }
                         .attr("x2", childPossiton[0])
                         .attr("y2", childPossiton[1])
                         .attr("stroke", "#555");
+                    
+
             
                     // Recursively draw links for each child
                     drawLinks(child, svg);
                 });
         };
         drawLinks(root);
+
+
         svg.selectAll('circle')
             .data(root.descendants())
             .join('circle')
-            .attr('transform', d => `translate(${radialPoint(d.x, d.y)})`)
+            .attr('transform', (d, index) => {
+
+                return `translate(${radialPoint(d.x, d.y)})`
+            }
+            )
             .attr('r', 5)
             .attr('fill', '#999');
 

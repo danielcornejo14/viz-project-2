@@ -7,7 +7,7 @@ export default async function Home() {
 
   const cwd = process.cwd();
 
-  const costaRicaDataFile = await fs.readFile(cwd + '/public/data/flareHierarchy.json', 'utf8');
+  const costaRicaDataFile = await fs.readFile(cwd + '/public/data/vueHierarchy.json', 'utf8');
   const costaRicaData = JSON.parse(costaRicaDataFile);
 
 
