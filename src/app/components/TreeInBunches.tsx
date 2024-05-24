@@ -17,7 +17,6 @@ const TreeInBunches: React.FC<TreeInBunchesInterface> = ({ width, height, data }
     const svgRef = useRef<SVGSVGElement>(null);
 
     useEffect(() => {
-        d3.selectAll("svg > *").remove()
         const svg = d3.select(svgRef.current)
             .attr("width", width)
             .attr("height", height)
