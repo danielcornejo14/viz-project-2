@@ -1,122 +1,114 @@
-"use client";
-import React, { useRef, useEffect } from "react";
-import * as d3 from "d3";
+"use client"
+import React, { useEffect, useRef } from 'react';
+import * as d3 from 'd3';
 
 interface TreeNode {
-  name: string;
-  children?: TreeNode[];
+    name: string;
+    children?: TreeNode[];
 }
 
-interface RadialClusterTreeProps {
-  data: TreeNode;
-  width: number;
-  height: number;
+interface TreeInBunchesInterface {
+    width: number;
+    height: number;
+    data: TreeNode;
 }
 
-const RadialClusterTree: React.FC<RadialClusterTreeProps> = ({ data, width, height }) => {
-  const svgRef = useRef<SVGSVGElement | null>(null);
+const TreeInBunches: React.FC<TreeInBunchesInterface> = ({ width, height, data }) => {
+    const svgRef = useRef<SVGSVGElement>(null);
 
-  useEffect(() => {
-    if (!data || !svgRef.current) return;
+    useEffect(() => {
+        d3.selectAll("svg > *").remove()
+        const svg = d3.select(svgRef.current)
+            .attr("width", width)
+            .attr("height", height)
+            .attr("viewBox", [-width / 2, -height / 2, width, height] as any);
 
-    const radius = Math.min(width, height) / 2;
+        const treeLayout = d3.tree()
+            .size([2 * Math.PI, Math.min(width, height) / 2 - 100])
+            .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth);
 
-    const tree = d3.tree<TreeNode>()
-      .size([2 * Math.PI, radius - 100])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth!);
+        const root = d3.hierarchy(data);
+        treeLayout(root);
 
-    const root = d3.hierarchy(data);
-    tree(root);
+        const radialPoint = (x: number, y: number) => {
+            return [(y) * Math.cos(x - Math.PI / 2), (y) * Math.sin(x - Math.PI / 2)];
+        };
+        const minAndMaxAngle = (node: d3.HierarchyPointNode<TreeNode>) => {
+            const angles = node.children.map(child => child.x);
+            return [Math.min(...angles), Math.max(...angles)];
+        };
 
-    const nodes = root.descendants();
-    const links = root.links();
+        const drawLinks = (node: d3.HierarchyPointNode<TreeNode>) => {
+            if (!node.children || node.children.length === 0) return;
 
-    const svg = d3.select(svgRef.current)
-      .attr("viewBox", [-width / 2, -height / 2, width, height] as any)
-      .style("font", "10px sans-serif");
+            const [minAng, maxAng] = minAndMaxAngle(node);
+            const radius = node.y+55;
+            const start = radialPoint(node.x, node.y);
+            const midAngle = (minAng + maxAng)/2;
+            const midPoint = radialPoint(midAngle, radius);
 
-    svg.selectAll('*').remove(); // Clear previous renders
+            // Draw arc
+            const arcPath = d3.arc()
+                .innerRadius(radius)
+                .outerRadius(radius)
+                .startAngle(minAng )
+                .endAngle(maxAng);
 
-    const link = svg.append("g")
-      .attr("fill", "none")
-      .attr("stroke", "#555")
-      .attr("stroke-opacity", 0.4)
-      .attr("stroke-width", 1.5)
-      .selectAll("path")
-      .data(links)
-      .enter().append("path")
-      .attr("d", d3.linkRadial<any, d3.HierarchyPointNode<TreeNode>>()
-        .angle(d => d.x)
-        .radius(d => d.y));
+            svg.append("path")
+                .attr("d", arcPath as any)
+                .attr("fill", "none")
+                .attr("stroke", "#555")
 
-    const node = svg.append("g")
-      .selectAll("g")
-      .data(nodes)
-      .enter().append("g")
-      .attr("transform", d => `
-        rotate(${d.x * 180 / Math.PI - 90})
-        translate(${d.y},0)
-      `);
+            // Draw line from node to midpoint of arc
+            svg.append("line")
+                .attr("x1", start[0])
+                .attr("y1", start[1])
+                .attr("x2", midPoint[0])
+                .attr("y2", midPoint[1])
+                .attr("stroke", "#555");
 
-    node.append("circle")
-      .attr("fill", d => d.children ? "#555" : "#999")
-      .attr("r", 3.5)
-      .on("click", (event, d) => {
-        highlightAndReposition(d);
-      });
+                node.children.forEach(child => {
+                    const childRadius = radius + 0; // Adjust as needed
+                    const childPossiton = radialPoint(child.x, child.y);
+                    const childPoint = radialPoint(child.x, childRadius);
+            
+                    // Compute the angles for the arc from midPoint to child
+                    const childAngle = (child.x + midAngle) / 2;
+                    const childArcRadius = (radius + childRadius) / 2;
+            
+                    const childArcPath = d3.arc()
+                        .innerRadius(childArcRadius)
+                        .outerRadius(childArcRadius)
+                        .startAngle(midAngle)
+                        .endAngle(child.x);
+            
+                    // Draw arc from midpoint of the original arc to each child
+                    svg.append("path")
+                        .attr("d", childArcPath as any)
+                        .attr("fill", "none")
+                        .attr("stroke", "#555");
+                    svg.append("line")
+                        .attr("x1", childPoint[0])
+                        .attr("y1", childPoint[1])
+                        .attr("x2", childPossiton[0])
+                        .attr("y2", childPossiton[1])
+                        .attr("stroke", "#555");
+            
+                    // Recursively draw links for each child
+                    drawLinks(child, svg);
+                });
+        };
+        drawLinks(root);
+        svg.selectAll('circle')
+            .data(root.descendants())
+            .join('circle')
+            .attr('transform', d => `translate(${radialPoint(d.x, d.y)})`)
+            .attr('r', 5)
+            .attr('fill', '#999');
 
-      const text = node.append("text")
-      .attr("display", "none")
-      .attr("dy", "0.31em")
-      .attr("x", d => d.x < Math.PI === !d.children ? 6 : -6)
-      .attr("text-anchor", d => d.x < Math.PI === !d.children ? "start" : "end")
-      .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
-      .text(d => d.data.name)
-      .attr("stroke", "white")
+    }, [data, width, height]);
 
-    function highlightAndReposition(d: any) {
-      const nodesToHighlight = d.descendants();
-      const nonHighlightedNodes = root.descendants().filter((node) => !nodesToHighlight.includes(node));
-      const scaleFactor = 1.5; // Factor to adjust the distance of non-highlighted nodes
-
-      // Highlight the selected sub-tree
-      node.selectAll("circle")
-        .attr("fill", nodeData => nodesToHighlight.includes(nodeData) ? "orange" : (nodeData.children ? "#555" : "#999"));
-
-      link.attr("stroke", linkData => nodesToHighlight.includes(linkData.target as any) ? "orange" : "#555");
-
-
-      // Reposition nodes
-      node.transition()
-        .duration(750)
-        .attr("transform", nodeData => {
-          const angle = nodeData.x * 180 / Math.PI - 90;
-          let radius = nodeData.y;
-          if (!nodesToHighlight.includes(nodeData)) {
-            radius -= 50; // Increase distance for non-highlighted nodes
-          }
-          return `rotate(${angle}) translate(${radius},0)`;
-        });
-
-      // Update links
-      link.transition()
-        .duration(750)
-        .attr("d", d3.linkRadial<any, d3.HierarchyPointNode<TreeNode>>()
-          .angle(d => d.x)
-          .radius(d => {
-            let radius = d.y;
-            if (!nodesToHighlight.includes(d)) {
-              radius -= 50; // Increase distance for non-highlighted nodes
-            }
-            return radius;
-          }));
-
-      text.attr("display", textData => nodesToHighlight.includes(textData) ? "block" : "none");
-
-    }
-  }, [data, width, height]);
-
-  return <svg ref={svgRef} width={width} height={height}></svg>;
+    return <svg ref={svgRef}></svg>;
 };
 
-export default RadialClusterTree;
+export default TreeInBunches;
